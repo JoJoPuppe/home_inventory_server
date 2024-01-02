@@ -74,13 +74,13 @@ def create_item(name: str = Form(...),
 
     return db_item
 
-
+# get all items
 @app.get("/items/", response_model=List[ItemResponse])
 def get_all_items(db: Session = Depends(get_db)):
     items = db.query(Item).all()
     return items
 
-
+# update item
 @app.put("/items/{item_id}", response_model=ItemUpdate)
 def update_item(item_id: int, item_data: ItemUpdate, db: Session = Depends(get_db)):
     db_item = db.query(Item).filter(Item.item_id == item_id).first()
@@ -97,6 +97,7 @@ def update_item(item_id: int, item_data: ItemUpdate, db: Session = Depends(get_d
         raise HTTPException(status_code=500, detail=str(e))
     return db_item
 
+# get item via ID
 @app.get("/items/{item_id}")
 def read_item(item_id: int, db: Session = Depends(get_db)):
     db_item = db.query(Item).filter(Item.id == item_id).first()
@@ -104,8 +105,14 @@ def read_item(item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Item not found")
     return db_item
 
-@app.get("/items/{item_id}/children")
+# get item children
+@app.get("/items/children/{item_id}")
 def get_item_children(item_id: int, db: Session = Depends(get_db)):
+    if item_id is None or item_id == 0:
+        children = db.query(Item).filter(Item.parent_item_id == None).all()
+        if not children:
+            raise HTTPException(status_code=404, detail="No Top Items found")
+        return children
     children = db.query(Item).filter(Item.parent_item_id == item_id).all()
     if not children:
         raise HTTPException(status_code=404, detail="No children found for this item")
