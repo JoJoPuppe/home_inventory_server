@@ -27,4 +27,5 @@ class ItemResponse(BaseModel):
     image_sm_path: Optional[str]
     creation_date: datetime
     last_update: Optional[datetime]
+    has_children: Optional[bool]
     tags: list

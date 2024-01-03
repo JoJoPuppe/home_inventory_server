@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
+from sqlalchemy.sql import exists, and_
 from models import init_db, SessionLocal, Item, Tag, item_tags, fill_states
 from schemas import ItemCreate, ItemUpdate, ItemResponse
 from typing import List
@@ -46,7 +47,7 @@ def create_item(name: str = Form(...),
                 image: UploadFile = File(None),
                 db: Session = Depends(get_db)):
     item_data = {"name": name, "comment": comment, "label_id": label_id, "parent_item_id": parent_item_id}
-    if image.filename:
+    if image and image.filename:
         file_extension = Path(image.filename).suffix
         if file_extension not in [".jpg", ".jpeg", ".png"]:
             raise HTTPException(status_code=400, detail="Invalid file type")
@@ -106,16 +107,23 @@ def read_item(item_id: int, db: Session = Depends(get_db)):
     return db_item
 
 # get item children
-@app.get("/items/children/{item_id}")
+@app.get("/items/children/{item_id}", response_model=List[ItemResponse])
 def get_item_children(item_id: int, db: Session = Depends(get_db)):
+    child_alias = aliased(Item)
+    has_children = exists().where(child_alias.parent_item_id == Item.item_id).label("has_children")
+    has_children_none = exists().where(child_alias.parent_item_id == None).label("has_children")
     if item_id is None or item_id == 0:
-        children = db.query(Item).filter(Item.parent_item_id == None).all()
+        children = db.query(Item, has_children_none).filter(Item.parent_item_id == None).all()
+        print(f"child count: {len(children)}")
         if not children:
             raise HTTPException(status_code=404, detail="No Top Items found")
+        children = add_has_children_field(children)
         return children
-    children = db.query(Item).filter(Item.parent_item_id == item_id).all()
+    children = db.query(Item, has_children).filter(Item.parent_item_id == item_id).all()
     if not children:
         raise HTTPException(status_code=404, detail="No children found for this item")
+    # check if children have min one child
+    children = add_has_children_field(children)
     return children
 
 @app.delete("/items/{item_id}")
@@ -154,3 +162,14 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
     db.delete(db_tag)
     db.commit()
     return {"detail": "Tag deleted"}
+
+def add_has_children_field(result_list):
+    if len(result_list[0]) != 2:
+        raise HTTPException(status_code=500, detail="Database returns not ITEM, has_children")
+    new_items = []
+    for item_and_children in result_list:
+        item = item_and_children[0]
+        has_children = item_and_children[1]
+        item.has_children = has_children
+        new_items.append(item)
+    return new_items
