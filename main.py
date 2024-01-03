@@ -111,18 +111,13 @@ def read_item(item_id: int, db: Session = Depends(get_db)):
 def get_item_children(item_id: int, db: Session = Depends(get_db)):
     child_alias = aliased(Item)
     has_children = exists().where(child_alias.parent_item_id == Item.item_id).label("has_children")
-    has_children_none = exists().where(child_alias.parent_item_id == None).label("has_children")
+    children_query = db.query(Item, has_children)
     if item_id is None or item_id == 0:
-        children = db.query(Item, has_children_none).filter(Item.parent_item_id == None).all()
-        print(f"child count: {len(children)}")
-        if not children:
-            raise HTTPException(status_code=404, detail="No Top Items found")
-        children = add_has_children_field(children)
-        return children
-    children = db.query(Item, has_children).filter(Item.parent_item_id == item_id).all()
+        children = children_query.filter(Item.parent_item_id == None).all()
+    else:
+        children = children_query.filter(Item.parent_item_id == item_id).all()
     if not children:
         raise HTTPException(status_code=404, detail="No children found for this item")
-    # check if children have min one child
     children = add_has_children_field(children)
     return children
 
