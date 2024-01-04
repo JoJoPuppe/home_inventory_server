@@ -101,7 +101,7 @@ def update_item(item_id: int, item_data: ItemUpdate, db: Session = Depends(get_d
 # get item via ID
 @app.get("/items/{item_id}")
 def read_item(item_id: int, db: Session = Depends(get_db)):
-    db_item = db.query(Item).filter(Item.id == item_id).first()
+    db_item = db.query(Item).filter(Item.item_id == item_id).first()
     if db_item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     return db_item
