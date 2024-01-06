@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, aliased
-from sqlalchemy.sql import exists, and_
+from sqlalchemy.sql import exists, func
 from models import init_db, SessionLocal, Item, Tag, item_tags, fill_states
 from schemas import ItemCreate, ItemUpdate, ItemResponse
 from typing import List
@@ -107,11 +107,12 @@ def read_item(item_id: int, db: Session = Depends(get_db)):
     return db_item
 
 # get item children
-@app.get("/items/children/{item_id}", response_model=List[ItemResponse])
-def get_item_children(item_id: int, db: Session = Depends(get_db)):
+@app.get("/items/children_v2/{item_id}", response_model=List[ItemResponse])
+def get_item_children_v2(item_id: int, db: Session = Depends(get_db)):
     child_alias = aliased(Item)
-    has_children = exists().where(child_alias.parent_item_id == Item.item_id).label("has_children")
-    children_query = db.query(Item, has_children)
+    children_count = db.query(func.count(child_alias.item_id)).filter(child_alias.parent_item_id == Item.item_id).scalar()
+    # has_children = exists().where(child_alias.parent_item_id == Item.item_id).label("has_children")
+    children_query = db.query(Item, children_count)
     if item_id is None or item_id == 0:
         children = children_query.filter(Item.parent_item_id == None).all()
     else:
@@ -120,6 +121,45 @@ def get_item_children(item_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="No children found for this item")
     children = add_has_children_field(children)
     return children
+
+
+@app.get("/items/children/{item_id}", response_model=List[ItemResponse])
+def get_item_children(item_id: int, db: Session = Depends(get_db)):
+    child_alias = aliased(Item)
+
+    # This query fetches items along with their children count
+    children_query = db.query(Item, func.count(child_alias.item_id).label('children_count'))\
+        .outerjoin(child_alias, child_alias.parent_item_id == Item.item_id)\
+        .group_by(Item.item_id)
+
+    if item_id is None or item_id == 0:
+        children = children_query.filter(Item.parent_item_id == None).all()
+    else:
+        children = children_query.filter(Item.parent_item_id == item_id).all()
+
+    if not children:
+        raise HTTPException(status_code=404, detail="No children found for this item")
+
+    # Map the result to the Pydantic model
+    response_list = []
+    for item, children_count in children:
+        response_item = ItemResponse(
+            item_id=item.item_id,
+            name=item.name,
+            comment=item.comment,
+            label_id=item.label_id,
+            parent_item_id=item.parent_item_id,
+            image_lg_path=item.image_lg_path,
+            image_sm_path=item.image_sm_path,
+            creation_date=item.creation_date,
+            last_update=item.last_update,
+            children_count=children_count,  # Set children_count here
+            tags=[]# Assuming Tag model has a 'name' field
+        )
+        response_list.append(response_item)
+
+    return response_list
+
 
 @app.delete("/items/{item_id}")
 def delete_item(item_id: int, db: Session = Depends(get_db)):
@@ -164,7 +204,7 @@ def add_has_children_field(result_list):
     new_items = []
     for item_and_children in result_list:
         item = item_and_children[0]
-        has_children = item_and_children[1]
-        item.has_children = has_children
+        children_count = item_and_children[1]
+        item.children_count = children_count
         new_items.append(item)
     return new_items

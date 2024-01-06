@@ -27,7 +27,6 @@ class Item(Base):
     creation_date = Column(DateTime(timezone=True), server_default=func.now())
     last_update = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     tags = relationship("Tag", secondary=item_tags, back_populates="items")
-    has_children = Column(Boolean)
 
     class Config:
         orm_mode = True
