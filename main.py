@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, aliased
-from sqlalchemy.sql import exists, func
+from sqlalchemy.sql import func, text
 from models import init_db, SessionLocal, Item, Tag, item_tags, fill_states
 from schemas import ItemCreate, ItemUpdate, ItemResponse
 from typing import List
@@ -10,6 +10,7 @@ from PIL import Image
 import uuid
 from pathlib import Path
 import logging
+from pprint import pprint
 
 app = FastAPI(debug=True)
 init_db()
@@ -197,6 +198,21 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
     db.delete(db_tag)
     db.commit()
     return {"detail": "Tag deleted"}
+
+
+@app.get("/search/")
+def search_items(query: str, db: Session = Depends(get_db)):
+    modified_query = query + "*"
+    sql_query = text(
+        "SELECT name, comment, bm25(items_fts) AS rank "
+        "FROM items_fts "
+        "WHERE items_fts MATCH :query "
+        "ORDER BY rank DESC"
+    )
+    results = db.execute(sql_query, {"query": modified_query})
+    items = results.mappings().all()
+    return items
+
 
 def add_has_children_field(result_list):
     if len(result_list[0]) != 2:
