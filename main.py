@@ -204,10 +204,11 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
 def search_items(query: str, db: Session = Depends(get_db)):
     modified_query = query + "*"
     sql_query = text(
-        "SELECT name, comment, bm25(items_fts) AS rank "
-        "FROM items_fts "
+        "SELECT i.* "
+        "FROM items as i "
+        "INNER JOIN items_fts ON i.rowid = items_fts.rowid "
         "WHERE items_fts MATCH :query "
-        "ORDER BY rank DESC"
+        "ORDER BY bm25(items_fts) DESC"
     )
     results = db.execute(sql_query, {"query": modified_query})
     items = results.mappings().all()
