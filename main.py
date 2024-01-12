@@ -84,18 +84,45 @@ def get_all_items(db: Session = Depends(get_db)):
 
 # update item
 @app.put("/items/{item_id}", response_model=ItemUpdate)
-def update_item(item_id: int, item_data: ItemUpdate, db: Session = Depends(get_db)):
+def update_item(item_id: int,
+                name: str = Form(None),
+                comment: str = Form(None),
+                label_id: int = Form(None),
+                parent_item_id: int = Form(None),
+                image: UploadFile = File(None),
+                db: Session = Depends(get_db)):
     db_item = db.query(Item).filter(Item.item_id == item_id).first()
     if not db_item:
         raise HTTPException(status_code=404, detail="Item not found")
-    try:
-        for var, value in vars(item_data).items():
+
+    item_data = {"name": name, "comment": comment, "label_id": label_id, "parent_item_id": parent_item_id}
+    if image and image.filename:
+        file_extension = Path(image.filename).suffix
+        if file_extension not in [".jpg", ".jpeg", ".png"]:
+            raise HTTPException(status_code=400, detail="Invalid file type")
+        random_filename = f"{uuid.uuid4()}{file_extension}"
+        image_lg_path = static_files_dir / random_filename
+        output_location = static_files_dir / f"resized_{random_filename}"
+        with open(image_lg_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        try:
+            resize_image(image_lg_path, output_location, 80, 80)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+        item_data["image_lg_path"] = image_lg_path.relative_to(base_dir).as_posix()
+        item_data["image_sm_path"] = output_location.relative_to(base_dir).as_posix()
+
+    try: 
+        for var, value in item_data.items():
             if value is not None:
+                print(f"Updating {var} to {value}")
                 setattr(db_item, var, value)
         db.commit()
         db.refresh(db_item)
     except Exception as e:
         db.rollback()
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
     return db_item
 
@@ -164,12 +191,12 @@ def get_item_children(item_id: int, db: Session = Depends(get_db)):
 
 @app.delete("/items/{item_id}")
 def delete_item(item_id: int, db: Session = Depends(get_db)):
-    db_item = db.query(Item).filter(Item.id == item_id).first()
+    db_item = db.query(Item).filter(Item.item_id == item_id).first()
     if db_item is None:
         raise HTTPException(status_code=404, detail="Item not found")
     db.delete(db_item)
     db.commit()
-    return {"detail": "Item deleted"}
+    return db_item
 
 @app.get("/items/{tag_name}")
 def get_items_by_tag(tag_name: str, db: Session = Depends(get_db)):

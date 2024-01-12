@@ -31,6 +31,9 @@ class Item(Base):
     class Config:
         orm_mode = True
 
+    def __str__(self):
+        return str(self.name)
+
 
 class State(Base):
     __tablename__ = "states"
