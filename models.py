@@ -1,9 +1,10 @@
-from sqlalchemy import Column, Integer, String, create_engine, Table, ForeignKey, DateTime, func, Boolean
+from sqlalchemy import Column, Integer, String, create_engine, Table, ForeignKey, DateTime, func, Boolean, inspect
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./home_inventory.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+inspector = inspect(engine)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
